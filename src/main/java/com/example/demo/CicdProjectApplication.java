@@ -19,6 +19,6 @@ class HelloWorldController {
 
 	@GetMapping("/")
 	public String hello() {
-		return "Hello, World!";
+		return "Check the CI/CD pipeline in action!";
 	}
 }
