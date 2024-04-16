@@ -57,6 +57,7 @@ jobs:
         host: ${{ secrets.SSH_HOST }}
         username: ${{ secrets.SSH_USERNAME }}
         key: ${{ secrets.SSH_KEY }}
+        port: 22
         script: |
           docker pull ${{ secrets.DOCKER_USERNAME }}/cicd_docker
           docker stop $(docker ps -a -q)
