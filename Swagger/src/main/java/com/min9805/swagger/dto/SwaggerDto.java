@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Tag(name = "SwaggerDto", description = "SwaggerDto API")
+@Tag(name = "Dto Name", description = "Description of SwaggerDto API")
 public class SwaggerDto {
     @Schema(title = "이름", description = "이름을 작성", example = "min9805")
     private String name;
