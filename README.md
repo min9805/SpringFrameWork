@@ -6,8 +6,11 @@
 - Gradle - Groovy 8.7
 - Java 17
 
-### CICD_GithubAction_AWS
-- Github Action, AWS 를 사용한 CI/CD 설정
+### [CICD_GithubAction_AWS_CodeDeploy](https://github.com/min9805/SpringFrameWork/tree/master/CICD_GithubAction_AWS_CodeDeploy)
+- Github Action, AWS CodeDeploy, S3, EC2를 사용한 CI/CD 설정
+
+### [CICD_GithubAction_AWS_Docker](https://github.com/min9805/SpringFrameWork/tree/master/CICD_GithubAction_AWS_Docker)
+- Github Action, Docker Hub, AWS EC2를 사용한 CI/CD 설정
 
 ### [Swagger](https://github.com/min9805/SpringFrameWork/tree/master/Swagger)
 - Swagger 사용법
