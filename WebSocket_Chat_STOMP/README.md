@@ -2,274 +2,243 @@
 
 # 개요
 
- 채팅 기능을 구현하기 위해 WebSocket 에 대한 공부를 시작했다. 
- 웹소켓을 왜 사용하는 지, 동작부터 구현까지 정리해보도록 하겠다.
+[이전 글](https://min9805.github.io/spring/WebSocket/) 에서는 WebSocket 으로 간단한 채팅 서버를 구현했다. 이것을 STOMP 를 사용해서 구현해보도록 하겠다.
 
-## HTTP vs WebSocket 
+Spring 에서 Websockt 의존성을 받아오면 Spring Messaging 이라는 의존성도 함께 추가된다.
 
-가장 일반적으로 서버와의 통신은 HTTP 를 통해 이루어진다.
-하지만 이 경우 서버는 요청이 오지 않으면 응답을 줄 수 없는 치명적인 단점이 존재한다.
-다시말해 채팅 혹은 주식 가격 등 실시간성으로 변하는 데이터를 클라이언트가 확인하기 위해서는 계속해서 HTTP 요청을 보내고 받아야한다.
+이를 이해하기 위해서는 STOMP 를 이해해야한다.
 
 
-당연하게도 클라이언트가 매번 똑같은 요청을 보내고 있는 것은 비효율적이다. 이를 위해 2 가지 해결책이 존재한다.
+# STOMP
 
-1. Server-Sent Evnet
-2. WebSocket
+- Simple Text Oriented Messaging Protocol
 
+STOPM 는 메세지 브로커를 활용해 쉽게 메세지를 주고받을 수 있는 프로토콜이다.
 
-SSE(Server-Sent Event) 는 단방향 데이터 통신이다. HTTP 프로토콜을 사용하며, 클라이언트는 데이터 수신만 가능하다.
+pub-sub 이라는 발행-구독 형태를 사용해 메세지를 주고받을 수 있다.
 
+웹 소켓 위에 얹어 함께 사용할 수 있는 하위(서브) 프로토콜이다!
 
-반면 WebSocket 은 양방향으로 데이터를 주고 받을 수 있다는 장점이 있다. 
+## 데이터 형식
 
+WebSocket 을 사용할 때는 메세지를 주고받는 형식은 따로 정해져있지 않다.
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/aabfa0c2-8253-4ddb-9840-01d2d48bbe53)
+반면 STOMP 에서는 커맨드, 헤더, 바디의 구조로 데이터 형식을 지정한다.
 
-HTTP 와 웹소켓의 차이가 정리되어있다. 
-가장 큰 차이는 웹소켓이 연결을 유지한다는 점이다.
+```
+COMMAND
+header1:value1
+header2:value2
+Body^@
+```
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/4ffeccb9-d6dd-414c-b6b4-4484e8a83970)
+- COMMAND
+    - SEND, SUBSCRIBE 를 지시할 수 있다.
+- HEADER
+    - 기존 websocket 으로 표현 불가능한 헤더를 작성할 수 있다.
+- BODY
+    - 실제 데이터가 담기는 부분이다.
 
-HTTP 와 웹소켓은 주고받는 데이터에서도 차이가 존재한다.
+이는 실제 데이터 예시를 살펴보면 이해가 빠르다
 
-HTTP 는 매번 HTTP 요청을 주고받기에 헤더 등 모든 정보를 계속해서 주고받는다.
+```
+SEND
+destination:/pub/chat
+content-type:application/json
 
-반면 웹소켓은 처음 핸드쉐이크를 통해 연결을 생성하면 이후 필요한 메세지만 주고받기에 주고받는 데이터의 양에서 차이가 많이 난다. 
+{"chatRoomId":1, "type":"TALK", "sender":"UserA", "message":"Hello world!"}
+^@
 
-# 웹소켓 구현
+```
 
-## 1. WebSocketConfig
+위 데이터는 UserA 가 1번 채팅방에 메세지를 보내는 데이터 예시이다.
+
+- COMMAND
+    - SEND 로 메세지 전송을 의미한다.
+- HEADER
+    - 메세지를 보낼 destination, type 이 지정되어있다.
+- BODY
+    - 실제 메세지가 담고있는 정보가 존재한다.
+
+## PUB-SUB
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/153ca740-fddb-4aa0-a0c6-95a8ff5678d3)
+
+STOMP 의 구조는 위와 같다.
+
+발신자는 a 라는 토픽에 메세지를 보내고, 구독자들은 a 라는 토픽을 구독하고 있다 가정한다.
+
+발신자는 destination 을 "/topic/a" 로 설정해 메세지 브로커를 거쳐 구독자들에게 바로 메세지를 보낼 수 있다.
+
+발신자가 서버 내에서 임의의 처리 및 가공이 필요하다면 destination 을 "/app/a" 로 설정해 메세지 가공 후 메세지 브로커에게 이를 전달할 수 있다.
+
+# 구현
+
+## 1. WebSocketBrokerConfig
 
 ```
 @Configuration
-@EnableWebSocket
-@RequiredArgsConstructor
-public class WebSocketConfig implements WebSocketConfigurer {
-
-    private final WebSocketHandler webSocketHandler;
+@EnableWebSocketMessageBroker
+public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // /ws-stomp로 연결하는 endpoint를 생성하고, CORS 허용
         registry
-                // /ws/conn 경로로 WebSocket 연결을 허용
-                .addHandler(webSocketHandler, "/ws/conn")
-                // CORS 허용
+                .addEndpoint("/ws-stomp")
                 .setAllowedOrigins("*");
     }
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        // /pub로 시작되는 메시지가 message-handling methods로 라우팅 되어야 한다.
+        registry.setApplicationDestinationPrefixes("/pub");
+        // /sub, /topic, /queue 로 시작되는 메시지가 메시지 브로커로 라우팅 되어야 한다.
+        registry.enableSimpleBroker("/sub", "/topic", "/queue");
+    }
 }
 
 ```
 
-Spring 에서는 간단하게 WebSocketConfig 를 구성할 수 있다.
+STOMP 구현은 WebSocket 보다도 간편하게 할 수 있다. WebSocketMessageBrokerConfigurer 를 구현하고 두 가지 설정만 하면 된다.
 
-- .addHandler(webSocketHandler, "/ws/chat")
+- registerStompEndpoints
+    - /ws-stomp로 연결하는 endpoint를 생성하고, CORS 허용한다.
+    - WebSocket 과 거의 동일하다.
 
-    - webSocketHandler 핸들러를 사용한다.
-    - endpoint = "/ws/conn" 으로 설정한다.
-    - ws://localhost:8080/ws/conn 으로 웹소켓 연결이 가능하다.
--  .setAllowedOrigins("*")
-    - CORS 허용 설정이다. 
+- configureMessageBroker
+    - setApplicationDestinationPrefixes
+        - /pub로 시작되는 메시지가 message-handling methods로 라우팅 되도록 지정한다.
+        - 메세지 도착의 prefix 를 지정하는 것이다.
+    - enableSimpleBroker
+        - /sub, /topic, /queue 로 시작되는 메시지가 메시지 브로커로 라우팅 되도록 지정한다.
+        - 쉽게 말해 메시지 브로커가 메세지를 전달할 수 있는 경로이다.
 
-## 2. WebSocketHandler
+## 2. Controller
 
 ```
-@Slf4j
-@Component
+@Controller
 @RequiredArgsConstructor
-public class WebSocketChatHandler extends TextWebSocketHandler {
-    private final ObjectMapper mapper;
+@Slf4j
+public class StompController {
 
-    // 소켓 세션을 저장할 Set
-    private final Set<WebSocketSession> sessions = new HashSet<>();
+    @MessageMapping("/chat/{chatRoomId}")
+    @SendTo("/sub/chat/{chatRoomId}")
+    public String message(
+            @DestinationVariable Long chatRoomId,
+            @Payload ChatDto request) {
+        log.info("chatRoomId: {}, message: {}", chatRoomId, request.getMessage());
 
-    // 소켓 연결 확인
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        // TODO Auto-generated method stub
-        log.info("{} 연결됨", session.getId());
-        sessions.add(session);
-        session.sendMessage(new TextMessage("WebSocket 연결 완료"));
-    }
-
-    // 소켓 메세지 처리
-    @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        String payload = message.getPayload();
-        log.info("payload {}", payload);
-
-        for (WebSocketSession s : sessions){
-            s.sendMessage(new TextMessage(payload));
-        }
-    }
-
-    // 소켓 연결 종료
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        // TODO Auto-generated method stub
-        log.info("{} 연결 끊김", session.getId());
-        sessions.remove(session);
-        session.sendMessage(new TextMessage("WebSocket 연결 종료"));
+        return request.getMessage();
     }
 }
-```
 
-TextWebSocketHandler 를 상속받으며 연결, 메세지 처리, 연결 종료 3가지 메서드를 오버라이딩해야한다. 소켓 통신은 서버와 클라이언트가 1:N 으로 연결을 맺을 수 있다. 또한 여기서의 세션은 흔히 알고 있는 세션과 달리 WebSocket 의 연결 정보를 담고 있는 객체라 보면 된다. 
-
-- afterConnectionEstablished
-    - 소켓의 연결부분을 처리하며 소켓 세션에 현재 세션을 추가한다.
-- handleTextMessage
-    - 실제 메세지를 처리하는 부분이다. 
-    - payload 를 받아와 sessions 에 저장된 세션에 모두 sendMessage 를 통해 전달한다.
-- afterConnectionClosed
-    - 연결 해제가 요청될 경우 sessions 에서 해당 세션을 제거한다. 
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/2656fcf4-5241-46ae-8e39-fa31848de05b)
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/a7656826-f786-4f0a-8112-7725a7233bec)
-
-APIC 툴을 사용해 웹소켓 통신을 테스트해보면 실제 잘 동작하는 것을 확인할 수 있다. 
-
-하지만 이런 채팅은 웹소켓 연결을 가진 사용자 모두에게 메세지를 계속해서 뿌리기 때문에 1:1 채팅을 구현할 수 없다.
-
-# 채팅방 구현
-
-## 1. Message DTO
-
-
-```
-@Builder
 @Getter
-@Setter
-@AllArgsConstructor
-@NoArgsConstructor
-public class ChatMessageDto {
-    // 메시지  타입 : 입장, 채팅, 퇴장
-    public enum MessageType{
-        JOIN, TALK, LEAVE
-    }
+public class ChatDto {
 
-    private MessageType messageType; // 메시지 타입
-    private Long chatRoomId; // 방번호
-    private String message; // 메시지
+    private Long chatRoomId;
+    private String sender;
+    private String message;
 }
 ```
 
-우선 메세지 DTO 를 생성한다. 
+Spring 에서는 Stomp 를 매우 쉽게 구현할 수 있다.
 
-채팅방을 유지하고 DTO 를 통해 입장, 채팅, 퇴장을 모두 관리할 것이기에 MessageType 을 위와 같이 설정한다.
+@MessageMapping 은 해당 경로로 들어오는 메세지들에 대해 동작한다는 뜻이다. 이때 앞서 설정한 prefix 가 존재하기에 "/pub/chat/1" 등의 경로로 들어와야 동작한다.
 
-메세지를 보낼 때에는 방 번호와 보낼 메세지도 필요하다. 
+경로에 존재하는 파라미터는 @DestinationVariable 을 사용해 매핑할 수 있다.
 
-## 2. WebSocketHandler
+@SendTo 는 말 그대로 메서드의 반환값을 해당 경로로 전달해준다는 뜻이다.
+
+들어온 메세지는 @Payload 로 메세지만 매핑해 원하는 처리 후 반환할 수 있다.
+
+## 실행
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/0f4bb728-8a40-4d78-aea0-c8f1efafabf3)
+
+발행자 / 2번 구독자 / 1번 구독자 가 존재한다.
+발행자가 1번 채팅방 경로로 메세지를 보낼 때 1번 구독자가 받는 것을 확인할 수 있다.
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/3a96c4f6-231c-4b9b-8ae9-72ee9f1566b5)
+
+2번 경로에 대해서도 동일하게 동작한다.
+
+APIC 에서는 연결과 동시에 구독을 지정해주어야해서 여러 구독을 만들어낼 수 없었다. 이대로 끝내기에는 구독과 연결 과정이 불명확하므로 페이로드를 자세히 열어보자.
+
+# 인터셉터
+
+## 1. Interceptor
 
 ```
-@Slf4j
 @Component
-@RequiredArgsConstructor
-public class WebSocketChatHandler extends TextWebSocketHandler {
-    private final ObjectMapper mapper;
+@Slf4j
+public class StompHandler implements ChannelInterceptor {
 
-    // 소켓 세션을 저장할 Set
-    private final Set<WebSocketSession> sessions = new HashSet<>();
-
-    // 채팅방 id와 소켓 세션을 저장할 Map
-    private final Map<Long,Set<WebSocketSession>> chatRoomSessionMap = new HashMap<>();
-
-    // 소켓 연결 확인
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        // TODO Auto-generated method stub
-        log.info("{} 연결됨", session.getId());
-        sessions.add(session);
-        session.sendMessage(new TextMessage("WebSocket 연결 완료"));
-    }
+    public void postSend(Message<?> message, MessageChannel channel, boolean sent) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+        String sessionId = accessor.getSessionId();
 
-    // 소켓 메세지 처리
-    @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        String payload = message.getPayload();
-        log.info("payload {}", payload);
-
-        // 클라이언트로부터 받은 메세지를 ChatMessageDto로 변환
-        ChatMessageDto chatMessageDto = mapper.readValue(payload, ChatMessageDto.class);
-        log.info("session {}", chatMessageDto.toString());
-
-        // 메세지 타입에 따라 분기
-        if(chatMessageDto.getMessageType().equals(ChatMessageDto.MessageType.JOIN)){
-            // 입장 메세지
-            chatRoomSessionMap.computeIfAbsent(chatMessageDto.getChatRoomId(), s -> new HashSet<>()).add(session);
-            chatMessageDto.setMessage("님이 입장하셨습니다.");
-        }
-        else if(chatMessageDto.getMessageType().equals(ChatMessageDto.MessageType.LEAVE)){
-            // 퇴장 메세지
-            chatRoomSessionMap.get(chatMessageDto.getChatRoomId()).remove(session);
-            chatMessageDto.setMessage("님이 퇴장하셨습니다.");
+        switch (Objects.requireNonNull(accessor.getCommand())) {
+            case CONNECT -> log.info("CONNECT: " + message);
+            case CONNECTED -> log.info("CONNECTED: " + message);
+            case DISCONNECT -> log.info("DISCONNECT: " + message);
+            case SUBSCRIBE -> log.info("SUBSCRIBE: " + message);
+            case UNSUBSCRIBE -> log.info("UNSUBSCRIBE: " + sessionId);
+            case SEND -> log.info("SEND: " + sessionId);
+            case MESSAGE -> log.info("MESSAGE: " + sessionId);
+            case ERROR -> log.info("ERROR: " + sessionId);
+            default -> log.info("UNKNOWN: " + sessionId);
         }
 
-        // 채팅 메세지 전송
-        for(WebSocketSession webSocketSession : chatRoomSessionMap.get(chatMessageDto.getChatRoomId())){
-            webSocketSession.sendMessage(new TextMessage(mapper.writeValueAsString(chatMessageDto)));
-        }
-    }
-
-    // 소켓 연결 종료
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        // TODO Auto-generated method stub
-        log.info("{} 연결 끊김", session.getId());
-        sessions.remove(session);
-        session.sendMessage(new TextMessage("WebSocket 연결 종료"));
     }
 }
 ```
 
- 추가된 코드는 채팅방 id와 소켓 세션을 저장할 Map 이다.
+메세지가 도착했을 때 이를 열어보고 필요하다면 전처리를 위해 인터셉터를 구성했다.
 
- 여기에 채팅방 별로 연결되어있는 세션이 저장될 것이다.
+```
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(stompHandler);
+    }
+```
 
- - handleTextMessage
-    - 클라이언트로부터 받은 메세지를 ChatMessageDto로 변환한다.
-    - 메세지 타입에 따라 분기한다.
-        - JOIN 일 경우 채팅방이 존재하면 세션을 추가하고 존재하지 않으면 새로 만들어 추가한다. 
-        - LEAVE 일 경우 채팅방에서 세션을 삭제한다. 
-    - 이후 채팅 메세지를 채팅방에 속한 세션들에게만 전송한다.
+해당 인터셉터를 config 에서 등록해주면 끝이다.
 
-위 과정을 통해 채팅방 입장, 대화, 퇴장을 간단하게 구현하였다.
- 
- ![image](https://github.com/min9805/SpringFrameWork/assets/56664567/2748ae52-c72f-4a74-8ad0-18dd5f74b524)
+## 실행
 
-사용자 A, B 는 1번 채팅방, 사용자 C 는 2번 채팅방에 입장한 상황이다.
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/1902b50a-c3e9-4da5-aa4b-6dc97dd22710)
 
- ![image](https://github.com/min9805/SpringFrameWork/assets/56664567/5d25aec6-2ce1-4104-bdc4-b37837f6f89e)
-
-1번 채팅방에 들어간 사용자 A 가 대화 메세지를 전송했다. 2번 채팅방에 들어가있는 사용자 C 는 메세지를 못받는 상황이다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/b734021c-4c68-421b-ae30-01e7b14e3dec)
-
-1번 채팅방에 들어간 사용자 B 가 퇴장하는 상황이다. A 에게 퇴장 메세지가 잘 전달되었다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/df9fc700-c794-43ba-8229-10dc5eb95117)
-
-사용자 B 가 2번 채팅방에 입장하였다. 사용자 C 에게 메세지가 잘 전달된다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/1718a3d5-97ca-4c07-9f72-ab5396f08b41)
-
-사용자 B 가 1번 채팅방에도 입장하여 1, 2 번 채팅방에 존재하는 상황이다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/a9340a9d-fd3a-4f62-81fc-9701fc8b992c)
-
-사용자 B 가 2번 채팅방에 대화를 전송한다. DTO 에 방번호가 존재하기에 해당 B 는 1, 2 번 방에 속하더라도 2번만 특정해서 메세지를 보낼 수 있다. 
-
-
+실제 실행 시 APIC 에서 연결을 진행하면 연결과 동시에 구독이 진행되는 것을 로그로 파악할 수 있었다.
 
 # 결론
 
-아주 간단하게 Websocket 구현이 가능하다. 하지만 여기서도 계속해서 메세지 이외에 함께 보내는 데이터가 꽤 있다. 이는 STOMP 를 통해 해결 가능하다. 다음에는 STOMP 를 알아보도록 하자.
+아주 간단하게 Spring 에서 STOMP 구현이 가능하다. 이를 활용해 실시간 서비스 구현에 사용할 수 있다. 마지막으로 STOMP 의 활용 방안과 장점에 대해 정리해보자.
+
+## STOMP 장점
+
+- 정해진 컨벤션 (데이터 구조.. 커맨드/헤더/바디)
+- 외부 Messaging Queue 사용 가능
+- Spring Security
+
+### 외부 Messaging Queue
+
+위 코드에서 메세지 브로커, 큐는 메모리 상에 존재한다. 이는 다수의 서버를 동작시킬 때 문제가 발생할 수 있는데, A 를 구독하는 3명의 사용자의 메세지 큐가 각각의 서버에 존재한다면 발행자가 요청한 서버에서만 메세지가 전달될 가능성이 있다.
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/66eee350-c12b-4829-af39-286fb190d7fe)
+
+인메모리 시스템의 위험성 등의 이유로 RabbitMQ, Kafka 등 외부 메세지 큐를 사용할 수 있다.
+
+### Spring Security
+
+위에서 configureClientInboundChannel 를 통해 설정한 인터셉터를 사용해 JWT 등 인증 과정도 처리할 수 있다.
 
 
-[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/WebSocket_Chat)
+[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/WebSocket_Chat_STOMP)
 
 
 # 참고
 
 [우아한테크 - 10분 테크톡](https://www.youtube.com/watch?v=rvss-_t6gzg&t=80s)
+[Spring Websocket & STOMP](https://brunch.co.kr/@springboot/695)
