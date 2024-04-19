@@ -1,4 +1,4 @@
-# https://min9805.github.io/spring/WebSocket_STOMP/
+# https://min9805.github.io/spring/WebSocket/
 
 # 개요
 
