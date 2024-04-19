@@ -107,6 +107,37 @@ Github Action 의 IP 주소를 알아내 배포 시 해당 IP 를 ssh 루트에 
 
 ![image](https://github.com/min9805/min9805.github.io/assets/56664567/03fcfbd4-f1a7-4af4-b25e-c4d7ac1af213)
 
+## Github Action 에서 Inbound 규칙 추가하기
+
+```
+# 1. Github Action IP 주소
+- name: Get Github Actions IP
+        id: github_action_ip 
+        uses: haythem/public-ip@v1.2 
+
+# 2. AWS 인증과정
+- name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with: 
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+# 3. IP 주소 보안 그룹에 추가
+- name: Add Github Actions IP to Security group
+        run: |
+          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+...
+
+# 4. IP 보안 그룹에서 제거
+- name: Remove Github Actions IP From Security Group
+  run: |
+    aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+```
+
+4 가지 단계를 걸쳐 해당 Github Action 이 실행되는 IP 주소를 일시적으로 ssh 접속 허용이 가능하다. 
+
 # 결과
 
 
@@ -122,3 +153,4 @@ Github Action 의 IP 주소를 알아내 배포 시 해당 IP 를 ssh 루트에 
 # 참고 
 
 [AWS + Github Action + Docker로 spring 서버 자동배포하기](https://velog.io/@leedool3003/AWS-Github-Action-Docker%EB%A1%9C-spring-%EC%84%9C%EB%B2%84-%EC%9E%90%EB%8F%99%EB%B0%B0%ED%8F%AC%ED%95%98%EA%B8%B0)
+
