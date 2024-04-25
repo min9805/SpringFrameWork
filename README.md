@@ -12,6 +12,9 @@
 ### [CICD_GithubAction_AWS_Docker](https://github.com/min9805/SpringFrameWork/tree/master/CICD_GithubAction_AWS_Docker)
 - Github Action, Docker Hub, AWS EC2를 사용한 CI/CD 설정
 
+### [Payment with PortOne](https://github.com/min9805/SpringFrameWork/tree/master/Payment)
+- PortOne(IamPort) 를 사용한 결제 구현
+
 ### [Swagger](https://github.com/min9805/SpringFrameWork/tree/master/Swagger)
 - Swagger 사용법
 
