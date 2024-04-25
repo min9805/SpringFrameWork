@@ -16,8 +16,9 @@
 <button id="pay__do" onclick="handlePayment()">결제하기</button>
 
 <script th:inline="javascript">
-    // 주문 정보 생성
-    // 결제하기 버튼 클릭 시 동작
+    // 아임포트 코드
+    var impCode = /*[[${@environment.getProperty('imp.code')}]]*/ '';
+
     function handlePayment(pg, payMethod) {
         console.log("handlePayment");
         console.log(pg);
@@ -30,26 +31,26 @@
             quantity: 1
         };
 
-        // 아임포트 초기화 및 결제 요청
-        IMP.init('imp57040764');
+        // 결제하기 버튼 클릭 시 결제 요청
+        IMP.init(impCode);
         IMP.request_pay({
             pg: pg,
             pay_method: payMethod,
-            merchant_uid: '21A1021AB123AAC', // 주문번호 생성
+            merchant_uid: '21A102B123AAC', // 주문번호 생성
             name: '상품1',
             amount: 3000, // 결제 가격
             buyer_name: '김민규',
             buyer_tel: '010-1234-5678'
         }, function(rsp) {
             if (rsp.success) {
-                // 결제 성공 시 서버로 결제 검증 요청
+                // 결제 성공 시
                 $.ajax({
                     type: 'POST',
                     url: 'api/v1/payment/validation/' + rsp.imp_uid
                 }).done(function(data) {
                     console.log(data);
                     if (order.price == data.response.amount) {
-                        // 결제 성공 시 주문 정보 서버로 전송
+                        // 결제 금액 일치. 결제 성공 처리
                         $.ajax({
                             url: "api/v1/payment/order",
                             method: "post",
