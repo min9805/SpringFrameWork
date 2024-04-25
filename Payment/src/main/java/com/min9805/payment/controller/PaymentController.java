@@ -1,5 +1,6 @@
 package com.min9805.payment.controller;
 
+import com.min9805.payment.dto.OrderDto;
 import com.min9805.payment.service.PaymentService;
 import com.siot.IamportRestClient.IamportClient;
 import com.siot.IamportRestClient.exception.IamportResponseException;
@@ -32,12 +33,11 @@ public class PaymentController {
     }
 
     @PostMapping("/order")
-    public ResponseEntity<String> processOrder(@RequestBody String jsonOrder) {
+    public ResponseEntity<String> processOrder(@RequestBody OrderDto orderDto) {
         // 주문 정보를 로그에 출력
-        log.info("Received orders: {}", jsonOrder);
-
+        log.info("Received orders: {}", orderDto.toString());
         // 성공적으로 받아들였다는 응답 반환
-        return ResponseEntity.ok("주문 정보가 성공적으로 받아들여졌습니다.");
+        return ResponseEntity.ok(paymentService.saveOrder(orderDto));
     }
 
     @PostMapping("/cancel/{imp_uid}")

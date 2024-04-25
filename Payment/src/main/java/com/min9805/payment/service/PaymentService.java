@@ -1,5 +1,7 @@
 package com.min9805.payment.service;
 
+import com.min9805.payment.domain.OrderRepository;
+import com.min9805.payment.dto.OrderDto;
 import com.siot.IamportRestClient.IamportClient;
 import com.siot.IamportRestClient.request.CancelData;
 import com.siot.IamportRestClient.response.IamportResponse;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class PaymentService {
     private final IamportClient iamportClient;
+    private final OrderRepository orderRepository;
 
     /**
      * 아임포트 서버로부터 결제 정보를 검증
@@ -55,6 +58,22 @@ public class PaymentService {
         } catch (Exception e) {
             log.info(e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * 주문 정보 저장
+     * @param orderDto
+     * @return
+     */
+    public String saveOrder(OrderDto orderDto){
+        try {
+            orderRepository.save(orderDto.toEntity());
+            return "주문 정보가 성공적으로 저장되었습니다.";
+        } catch (Exception e) {
+            log.info(e.getMessage());
+            cancelPayment(orderDto.getImpUid());
+            return "주문 정보 저장에 실패했습니다.";
         }
     }
 

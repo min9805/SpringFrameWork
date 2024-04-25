@@ -11,9 +11,7 @@
 <body>
 <!-- 버튼들 -->
 <button id="cardPay" onclick="handlePayment('html5_inicis.INIpayTest', 'card')">카드 결제</button>
-<button id="phonePay" onclick="handlePayment('danal', 'MOBILE')">휴대폰 결제</button>
 <button id="kakaoPay" onclick="handlePayment('kakaopay', 'card')">카카오페이 결제</button>
-<button id="pay__do" onclick="handlePayment()">결제하기</button>
 
 <script th:inline="javascript">
     // 아임포트 코드
@@ -36,7 +34,7 @@
         IMP.request_pay({
             pg: pg,
             pay_method: payMethod,
-            merchant_uid: '21A102B123AAC', // 주문번호 생성
+            merchant_uid: '212R3A11TD233AAC', // 주문번호 생성
             name: '상품1',
             amount: 3000, // 결제 가격
             buyer_name: '김민규',
@@ -50,6 +48,8 @@
                 }).done(function(data) {
                     console.log(data);
                     if (order.price == data.response.amount) {
+                        order.impUid = rsp.imp_uid;
+                        order.merchantUid = rsp.merchant_uid;
                         // 결제 금액 일치. 결제 성공 처리
                         $.ajax({
                             url: "api/v1/payment/order",
@@ -79,20 +79,5 @@
     }
 </script>
 
-<!-- 주문번호 생성 함수 -->
-<script th:inline="javascript">
-    function createOrderNum() {
-        var date = new Date();
-        var year = date.getFullYear();
-        var month = String(date.getMonth() + 1).padStart(2, "0");
-        var day = String(date.getDate()).padStart(2, "0");
-
-        var orderNum = year + month + day;
-        for (var i = 0; i < 5; i++) {
-            orderNum += Math.floor(Math.random() * 8);
-        }
-        return parseInt(orderNum);
-    }
-</script>
 </body>
 </html>
