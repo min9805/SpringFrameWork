@@ -1,241 +1,255 @@
-# https://min9805.github.io/spring/Portone/
-
+# [https://min9805.github.io/spring/ENUM/](https://min9805.github.io/spring/ENUM/)
 
 # 개요
 
-Spring 프로젝트를 진행하면서 결제 구현이 필요했다.
+ 개발 중 ENUM 값을 데이터베이스에 저장하니 ENUM 값의 순서, 인덱스가 저장되었다. 나는 상태코드를 기대하면서 저장했는데 숫자가 나와 당황했다. 그런고로 ENUM 의 데이터베이스 저장 및 처리에 대해서 알아보도록 하자.
+
+# ENUM 값 저장 
+
+```
+@Entity
+@Builder
+@RequiredArgsConstructor
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    private String email;
+
+    private UserStatus status;
+}
+
+public enum UserStatus {
+    ACTIVE, INACTIVE, DELETED, BLOCKED, PENDING
+}
+
+...
+userService.createUser("min9805", "min1925k@gmail.com", UserStatus.ACTIVE);
+userService.createUser("test", "test@test.com", UserStatus.DELETED);
+
+...
+
+```
+
+UserStatus 에 관한 아주 간단한 ENUM 을 생성하였다.
+createUser 를 통해 ENUM 값을 가진 유저를 저장해보자! 
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/a2e6e322-e6ea-4598-af31-aeee1b23f1a6)
+
+위와 같이 ACTIVE 가 0번째이므로 0, DELETE 는 2가 저장되는 것을 확인할 수 있다. 
+
+만약 저렇게 숫자로만 표현되어있다면 해당 0, 2 가 어떤 코드를 나타내는 것인지 하나하나 확인해야하며, ENUM 이 많아지게 된다면 한 줄의 데이터를 파악하는데에도 시간이 소요될 것이다. 
+
+이를 위해 ENUM 의 상태코드를 데이터베이스에 저장하는 방법이 나타났다. 
+
+# @Enumerate
+
+```
+@Entity
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    private String email;
+
+    @Enumerated(EnumType.STRING)
+    private UserStatus status;
+}
+```
+
+ENUM to String 으로 값을 저장하는 가장 간편한 형태이다. 
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/1d1bcec1-f042-48d3-9e8a-7b94187f1c22)
+
+동일한 코드를 실행시켰을 때, Status 에 상태코드값이 그대로 들어가는 것을 확인할 수 있다. 
+
+>     @Enumerated(EnumType.ORDINAL)
+
+EnumType 에는 Stirng 이외에 ORDINAL 이 존재한다. 이는 처음과 같이 숫자로 ENUM 을 표현하는 방법이다. 하지만 이런 표기법에서는 ENUM 의 순서가 변경되거나 혹은 중간에 ENUM 이 추가되는 등의 일이 발생하면 순서가 기존과 달라져 기존 DB 와 ENUM 의 매핑이 꼬여버리는 심각한 사태가 발생할 수 있다. 이를 방지하고자 위 방법은 지양하도록 하자..!
+
+# @Convert
+
+String 타입으로 직접 저장하는 방법에도 한계가 존재했다.
+
+선언한 상수의 이름이 변경되거나, 문자열로 DB에 저장되기에 더 많은 공간이 할당된다는 점이다. 
+
+이런 한계를 극복하기 위해 JPA 2.1 부터 도입된 것이 @Convert 이다.
+
+```
+public enum UserStatus {
+    ACTIVE(0, "활성화"),
+    INACTIVE(1, "비활성화"),
+    DELETED(2, "삭제"),
+    BLOCKED(3, "차단"),
+    PENDING(4, "대기");
+
+    private final int code;
+    private final String description;
+
+    UserStatus(int code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+}
+
+```
+
+실제 사용되는 ENUM 은 위의 형태로 이루어져있다. ACTIVE 는 0, "활성화" 등과 동일시 되어 데이터들의 연관 관계를 표현할 수 있다. 
+
+이외에도 ENUM 값들은 함수를 가지거나 기능과 책임을 확실하게 구분 지을 수 있는 수단이 된다. 이는 [ENUM 활용기](https://techblog.woowahan.com/2527/) 를 참고하면 자세하게 나와있다. 
+
+어쩃든 우리는 저 형태의 코드를 데이터베이스에는 숫자로 저장해 이름 변경에 대비하며 공간을 아끼고, 객체에서는 상태코드로 가독성을 높일 것이다. 
+
+```
+...
+    @Convert(converter = UserStatusConverter.class)
+    private UserStatus status;
+...
+
+public class UserStatusConverter implements AttributeConverter<UserStatus, Integer> {
+    @Override
+    public Integer convertToDatabaseColumn(UserStatus attribute) {
+        return attribute.getCode();
+    }
+
+    @Override
+    public UserStatus convertToEntityAttribute(Integer dbData) {
+        return UserStatus.of(dbData);
+    }
+}
+```
+User 의 엔티티에 @Convert 를 추가하고 UserStatusConverter 를 작성하자.
+
+- convertToDatabaseColumn() : enum을 DB에 어떤 값으로 넣을 것인지 정의
+- converToEntityAttribute() : DB에서 읽힌 값에 따라 어떻게 enum과 매칭 시킬 것인지 정의
+
+AttributeConverter 를 상속받아 위 두 가지 메서드를 정의해야한다. 위에서는 아주 단순하게 정의하였다. 
+
+실제 테스트코드를 작성시켜보면, 
 
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/49b126e6-d859-4e8f-a3df-30e2405ea29c)
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/b039a2b8-fae2-4d04-b821-756cfeee52af)
 
-실제 PG 사와 카드사를 거쳐 구현하기에는 까다로운 요소들이 많았고, 이를 간단하게 구현할 수 있는 PortOne API 를 사용하기로 하였다.
+데이터베이스에 저장될 때에는 Code, 숫자가 저장된다.
 
-해당 게시물은 Spring Boot 만을 사용하였다.
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/c29244b1-68e2-4bd7-bba1-0133d65d884b)
+
+실제 객체를 데이터베이스에서 찾아서 받아온다면 해당 "0" 이라는 숫자는 ENUM 으로 매핑되어 객체에 들어가있는 것을 확인할 수 있다!!
+
+위 방법을 사용하면 ENUM 의 순서에 영향을 받지 않으며 상수의 이름을 변경하더라도 데이터베이스 상에서 문제를 일으키지 않는다. 
+
+# Converter..?
+
+하지만 위의 방법은 모든 ENUM 에 대해서 Converter 를 매번 만들어줘야하는 문제가 있다. ENUM 을 10개 생성하면 10개의 Converter 가 생성된다는 뜻이다!
+
+반복되는 부분? 상속으로 없애보자.
+
+```
+public interface LegacyCommonType {
+
+    int getCode();
+    String getDescription();
+}
+
+@Getter
+public enum UserStatus implements LegacyCommonType{
+    ACTIVE(0, "활성화"),
+    INACTIVE(1, "비활성화"),
+    DELETED(2, "삭제"),
+    BLOCKED(3, "차단"),
+    PENDING(4, "대기");
+
+    private final int code;
+    private final String description;
+ 
+    ...
+}
+```
+
+우선 코드의 Get 부분이 필수이므로 interface 를 하나 생성하자. 
+
+모든 Status 는 해당 인터페이스를 구현해야한다. (물론 Getter 하나면 충분) 이를 통해 타입을 확실히 통일시킬 수 있다.
+
+```
+public class AbstractLegacyEnumAttributeConverter<E extends Enum<E> & LegacyCommonType> implements AttributeConverter<E, String> {
+
+    private final Class<E> enumClass;
+
+    public AbstractLegacyEnumAttributeConverter(Class<E> enumClass) {
+        this.enumClass = enumClass;
+    }
+
+    @Override
+    public String convertToDatabaseColumn(E attribute) {
+        return attribute.getCode() + "";
+    }
+
+    @Override
+    public E convertToEntityAttribute(String dbData) {
+        int code = Integer.parseInt(dbData);
+        return LegacyEnumUtils.of(enumClass, code);
+    }
+}
+```
+
+이후 Status 에 적용시킬 Converter 를 생성하자!
+
+해당 컨버터는 Enum 에 대해서 code, String 으로 변환시키는 동일한 역할을 한다.
+
+이를 위해서는 enum 에서 code 를 통해 String 값으로 변환시켜줄 LegacyEnumUtils 가 필요하다.
+
+```
+public class LegacyEnumUtils {
+
+        public static <E extends Enum<E> & LegacyCommonType> E of(Class<E> enumClass, int code) {
+            E[] enumConstants = enumClass.getEnumConstants();
+            for (E e : enumConstants) {
+                if (e.getCode() == code) {
+                    return e;
+                }
+            }
+            throw new IllegalArgumentException("Unknown code: " + code);
+        }
+}
+```
+
+마지막으로 enum 을 String 으로 변환시켜줄 Utils 를 작성하면 끝! 
+
+```
+public class UserStatusConverter extends AbstractLegacyEnumAttributeConverter<UserStatus> {
+    public UserStatusConverter() {
+        super(UserStatus.class);
+    }
+}
+```
+
+Status 의 Converter 를 상속받아 간편하게 구현할 수 있다!
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/b039a2b8-fae2-4d04-b821-756cfeee52af)
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/c29244b1-68e2-4bd7-bba1-0133d65d884b)
+
+실행 결과 또한 동일하게 나오는 것을 직접 확인할 수 있다! 
 
 # 코드
 
-## 1. Front
-
-```
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <title>Payment Page</title>
-    <!-- jQuery CDN 추가 -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <!-- 아임포트 스크립트 추가 -->
-    <script type="text/javascript" src="https://cdn.iamport.kr/js/iamport.payment-1.2.0.js"></script>
-</head>
-<body>
-<!-- 버튼들 -->
-<button id="cardPay" onclick="handlePayment('html5_inicis.INIpayTest', 'card')">카드 결제</button>
-<button id="kakaoPay" onclick="handlePayment('kakaopay', 'card')">카카오페이 결제</button>
-
-<script th:inline="javascript">
-    // 아임포트 코드
-    var impCode = /*[[${@environment.getProperty('imp.code')}]]*/ '';
-
-    function handlePayment(pg, payMethod) {
-        console.log("handlePayment");
-        console.log(pg);
-        console.log(payMethod);
-
-        var order = {
-            productId: 1,
-            productName: '상품1',
-            price: 3000,
-            quantity: 1
-        };
-
-        // 결제하기 버튼 클릭 시 결제 요청
-        IMP.init(impCode);
-        IMP.request_pay({
-            pg: pg,
-            pay_method: payMethod,
-            merchant_uid: '212R3A11TD233AAC', // 주문번호 생성
-            name: '상품1',
-            amount: 3000, // 결제 가격
-            buyer_name: '김민규',
-            buyer_tel: '010-1234-5678'
-        }, function(rsp) {
-            if (rsp.success) {
-                // 결제 성공 시
-                $.ajax({
-                    type: 'POST',
-                    url: 'api/v1/payment/validation/' + rsp.imp_uid
-                }).done(function(data) {
-                    console.log(data);
-                    if (order.price == data.response.amount) {
-                        order.impUid = rsp.imp_uid;
-                        order.merchantUid = rsp.merchant_uid;
-                        // 결제 금액 일치. 결제 성공 처리
-                        $.ajax({
-                            url: "api/v1/payment/order",
-                            method: "post",
-                            data: JSON.stringify(order),
-                            contentType: "application/json"
-                        }).then(function(res) {
-                            console.log("res", res);
-                            console.log("rsp", rsp);
-                            var msg = '결제가 완료되었습니다.';
-                            msg += '고유ID : ' + rsp.imp_uid;
-                            msg += '상점 거래ID : ' + rsp.merchant_uid;
-                            msg += '결제 금액 : ' + rsp.paid_amount;
-                            msg += '카드 승인번호 : ' + rsp.apply_num;
-                            alert(msg);
-                        }).catch(function(error) {
-                            alert("주문정보 저장을 실패 했습니다.");
-                        });
-                    }
-                }).catch(function(error) {
-                    alert('결제에 실패하였습니다. ' + rsp.error_msg);
-                });
-            } else {
-                alert(rsp.error_msg);
-            }
-        });
-    }
-</script>
-
-
-</body>
-</html>
-
-```
-
-결제는 클라이언트가 직접 portone 에 결제 요청하면서 시작된다.
-
-타임리프로 구성된 페이지를 자세히 살펴보면 총 3가지 단계로 구성되어있다.
-
-1. 포트원 라이브러리를 추가하고 객체를 초기화한다.
-2. 서버에서 실제 결제 건을 조회한다.
-3. 결제 금액이 일치한다면 Order 객체를 서버에 저장한다.
-
-클라이언트 측에서 라이브러리를 다운받기만 하더라도 다음과 같은 결제창을 얻을 수 있다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/ca81fcf6-3d8f-4814-8e03-68b17f170a95)
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/b0b0e448-2b97-4c6c-9efa-c814f8e62efe)
-
-## 2. Controller
-
-```
-@RestController
-@RequestMapping("/api/v1/payment")
-@RequiredArgsConstructor
-@Slf4j
-@Tag(name = "Payments", description = "결제 API")
-public class PaymentController {
-    private final PaymentService paymentService;
-
-    @PostMapping("/validation/{imp_uid}")
-    public IamportResponse<Payment> validateIamport(@PathVariable String imp_uid) throws IamportResponseException, IOException {
-        log.info("imp_uid: {}", imp_uid);
-        log.info("validateIamport");
-        return paymentService.validateIamport(imp_uid);
-    }
-
-    @PostMapping("/order")
-    public ResponseEntity<String> processOrder(@RequestBody OrderDto orderDto) {
-        // 주문 정보를 로그에 출력
-        log.info("Received orders: {}", orderDto.toString());
-        // 성공적으로 받아들였다는 응답 반환
-        return ResponseEntity.ok(paymentService.saveOrder(orderDto));
-    }
-
-    @PostMapping("/cancel/{imp_uid}")
-    public IamportResponse<Payment> cancelPayment(@PathVariable String imp_uid) throws IamportResponseException, IOException {
-        return paymentService.cancelPayment(imp_uid);
-    }
-}
-```
-
-## 3.Service
-
-```
-@Service
-@Slf4j
-@RequiredArgsConstructor
-public class PaymentService {
-    private final IamportClient iamportClient;
-    private final OrderRepository orderRepository;
-
-    /**
-     * 아임포트 서버로부터 결제 정보를 검증
-     * @param imp_uid
-     */
-    public IamportResponse<Payment> validateIamport(String imp_uid) {
-        try {
-            IamportResponse<Payment> payment = iamportClient.paymentByImpUid(imp_uid);
-            log.info("결제 요청 응답. 결제 내역 - 주문 번호: {}", payment.getResponse());
-            return payment;
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * 아임포트 서버로부터 결제 취소 요청
-     *
-     * @param imp_uid
-     * @return
-     */
-    public IamportResponse<Payment> cancelPayment(String imp_uid) {
-        try {
-            CancelData cancelData = new CancelData(imp_uid, true);
-            IamportResponse<Payment> payment = iamportClient.cancelPaymentByImpUid(cancelData);
-            return payment;
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * 주문 정보 저장
-     * @param orderDto
-     * @return
-     */
-    public String saveOrder(OrderDto orderDto){
-        try {
-            orderRepository.save(orderDto.toEntity());
-            return "주문 정보가 성공적으로 저장되었습니다.";
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            cancelPayment(orderDto.getImpUid());
-            return "주문 정보 저장에 실패했습니다.";
-        }
-    }
-}
-```
-
-우선 Config 를 통해 IamportClient 를 Bean 으로 등록한다.
-
-이전에는 token 을 발급받고 특정 url 을 통해 결제 조회 및 취소를 진행했지만 지금은 IamportClient 를 통해 간편하게 조회 및 취소가 가능하다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/51d77da4-8225-4581-9fe4-bfbe46dc55c0)
-
-# 추가
-
-## PG 테스트 설정
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/04f23a7f-a34b-417a-a668-fc6413beabaf)
-
-해당 에러가 발생했었다. 이는 PortOne 에서 PG 설정을 등록하지 않았기 때문인다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/ed117dc7-8f46-4e0f-bd44-5f0064ea72c6)
-
-테스트를 위해서 혹은 실제 결제를 위해 등록 과정이 필요하다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/5f55c8ee-9afb-4cab-9b2f-3f970a01125a)
-
-
+[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/ENUM)
 
 # 참고
 
-[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/Payment)
+[Java ENUM 활용기](https://techblog.woowahan.com/2527/)
 
+[Legacy DB의 JPA Entity Mapping (Enum Converter 편)
+](https://techblog.woowahan.com/2600/)
 
-[PortOne 개발자 센터](https://developers.portone.io/docs/ko/readme?v=v1)
+[[Spring] DB 코드값과 Enum의 매핑 방법 @Enumerated vs @Convert](https://velog.io/@pood/Spring-DB-%EC%BD%94%EB%93%9C%EA%B0%92%EA%B3%BC-Enum%EC%9D%98-%EB%A7%A4%ED%95%91-%EB%B0%A9%EB%B2%95-Enumerated-vs-Convert)
+
