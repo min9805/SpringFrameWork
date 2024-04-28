@@ -3,7 +3,7 @@ package com.min9805.demo.status;
 import lombok.Getter;
 
 @Getter
-public enum UserStatus {
+public enum UserStatus implements LegacyCommonType{
     ACTIVE(0, "활성화"),
     INACTIVE(1, "비활성화"),
     DELETED(2, "삭제"),
