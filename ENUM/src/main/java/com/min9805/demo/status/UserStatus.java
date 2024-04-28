@@ -1,5 +1,8 @@
 package com.min9805.demo.status;
 
+import lombok.Getter;
+
+@Getter
 public enum UserStatus {
     ACTIVE(0, "활성화"),
     INACTIVE(1, "비활성화"),
@@ -13,5 +16,14 @@ public enum UserStatus {
     UserStatus(int code, String description) {
         this.code = code;
         this.description = description;
+    }
+
+    public static UserStatus of(int code) {
+        for (UserStatus value : values()) {
+            if (value.code == code) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("Invalid UserStatus code: " + code);
     }
 }

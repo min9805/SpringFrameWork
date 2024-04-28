@@ -19,4 +19,8 @@ public class UserService {
                 .status(status)
                 .build());
     }
+
+    public User getUserRepository(Long id) {
+        return  userRepository.findById(id).orElseThrow(RuntimeException::new);
+    }
 }
