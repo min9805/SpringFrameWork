@@ -12,6 +12,10 @@
 ### [CICD_GithubAction_AWS_Docker](https://github.com/min9805/SpringFrameWork/tree/master/CICD_GithubAction_AWS_Docker)
 - Github Action, Docker Hub, AWS EC2를 사용한 CI/CD 설정
 
+### [ENUM DB, JPA Mapping](https://github.com/min9805/SpringFrameWork/tree/master/ENUM)
+- ENUM 의 DB, JPA Entity Mapping
+- @Enumerated vs @Convert
+
 ### [Payment with PortOne](https://github.com/min9805/SpringFrameWork/tree/master/Payment)
 - PortOne(IamPort) 를 사용한 결제 구현
 
