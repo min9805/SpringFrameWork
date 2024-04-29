@@ -1,241 +1,246 @@
-# https://min9805.github.io/spring/Portone/
-
+# https://min9805.github.io/spring/TestDB/
 
 # 개요
 
-Spring 프로젝트를 진행하면서 결제 구현이 필요했다.
+통합 테스트 코드에서는 실제 데이터베이스를 연결해서 작업하였다. 하지만 User Id 를 통한 List 조회 시에 테스트를 위해 사용한 데이터뿐만 아니라 실제 데이터베이스에 들어가있던 데이터들도 함께 조회되면서 테스트 검증에 어려움을 겪었다.
 
+이를 해결하기 위해 테스트 데이터베이스를 분리하였지만 데이터베이스가 비어있어 연관관계 매핑에 문제가 발생하였다.
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/49b126e6-d859-4e8f-a3df-30e2405ea29c)
-
-실제 PG 사와 카드사를 거쳐 구현하기에는 까다로운 요소들이 많았고, 이를 간단하게 구현할 수 있는 PortOne API 를 사용하기로 하였다.
-
-해당 게시물은 Spring Boot 만을 사용하였다.
-
-# 코드
-
-## 1. Front
+# Test Code
 
 ```
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <title>Payment Page</title>
-    <!-- jQuery CDN 추가 -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <!-- 아임포트 스크립트 추가 -->
-    <script type="text/javascript" src="https://cdn.iamport.kr/js/iamport.payment-1.2.0.js"></script>
-</head>
-<body>
-<!-- 버튼들 -->
-<button id="cardPay" onclick="handlePayment('html5_inicis.INIpayTest', 'card')">카드 결제</button>
-<button id="kakaoPay" onclick="handlePayment('kakaopay', 'card')">카카오페이 결제</button>
+@Entity
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-<script th:inline="javascript">
-    // 아임포트 코드
-    var impCode = /*[[${@environment.getProperty('imp.code')}]]*/ '';
+    private String name;
 
-    function handlePayment(pg, payMethod) {
-        console.log("handlePayment");
-        console.log(pg);
-        console.log(payMethod);
-
-        var order = {
-            productId: 1,
-            productName: '상품1',
-            price: 3000,
-            quantity: 1
-        };
-
-        // 결제하기 버튼 클릭 시 결제 요청
-        IMP.init(impCode);
-        IMP.request_pay({
-            pg: pg,
-            pay_method: payMethod,
-            merchant_uid: '212R3A11TD233AAC', // 주문번호 생성
-            name: '상품1',
-            amount: 3000, // 결제 가격
-            buyer_name: '김민규',
-            buyer_tel: '010-1234-5678'
-        }, function(rsp) {
-            if (rsp.success) {
-                // 결제 성공 시
-                $.ajax({
-                    type: 'POST',
-                    url: 'api/v1/payment/validation/' + rsp.imp_uid
-                }).done(function(data) {
-                    console.log(data);
-                    if (order.price == data.response.amount) {
-                        order.impUid = rsp.imp_uid;
-                        order.merchantUid = rsp.merchant_uid;
-                        // 결제 금액 일치. 결제 성공 처리
-                        $.ajax({
-                            url: "api/v1/payment/order",
-                            method: "post",
-                            data: JSON.stringify(order),
-                            contentType: "application/json"
-                        }).then(function(res) {
-                            console.log("res", res);
-                            console.log("rsp", rsp);
-                            var msg = '결제가 완료되었습니다.';
-                            msg += '고유ID : ' + rsp.imp_uid;
-                            msg += '상점 거래ID : ' + rsp.merchant_uid;
-                            msg += '결제 금액 : ' + rsp.paid_amount;
-                            msg += '카드 승인번호 : ' + rsp.apply_num;
-                            alert(msg);
-                        }).catch(function(error) {
-                            alert("주문정보 저장을 실패 했습니다.");
-                        });
-                    }
-                }).catch(function(error) {
-                    alert('결제에 실패하였습니다. ' + rsp.error_msg);
-                });
-            } else {
-                alert(rsp.error_msg);
-            }
-        });
-    }
-</script>
-
-
-</body>
-</html>
-
-```
-
-결제는 클라이언트가 직접 portone 에 결제 요청하면서 시작된다.
-
-타임리프로 구성된 페이지를 자세히 살펴보면 총 3가지 단계로 구성되어있다.
-
-1. 포트원 라이브러리를 추가하고 객체를 초기화한다.
-2. 서버에서 실제 결제 건을 조회한다.
-3. 결제 금액이 일치한다면 Order 객체를 서버에 저장한다.
-
-클라이언트 측에서 라이브러리를 다운받기만 하더라도 다음과 같은 결제창을 얻을 수 있다.
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/ca81fcf6-3d8f-4814-8e03-68b17f170a95)
-
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/b0b0e448-2b97-4c6c-9efa-c814f8e62efe)
-
-## 2. Controller
-
-```
-@RestController
-@RequestMapping("/api/v1/payment")
-@RequiredArgsConstructor
-@Slf4j
-@Tag(name = "Payments", description = "결제 API")
-public class PaymentController {
-    private final PaymentService paymentService;
-
-    @PostMapping("/validation/{imp_uid}")
-    public IamportResponse<Payment> validateIamport(@PathVariable String imp_uid) throws IamportResponseException, IOException {
-        log.info("imp_uid: {}", imp_uid);
-        log.info("validateIamport");
-        return paymentService.validateIamport(imp_uid);
-    }
-
-    @PostMapping("/order")
-    public ResponseEntity<String> processOrder(@RequestBody OrderDto orderDto) {
-        // 주문 정보를 로그에 출력
-        log.info("Received orders: {}", orderDto.toString());
-        // 성공적으로 받아들였다는 응답 반환
-        return ResponseEntity.ok(paymentService.saveOrder(orderDto));
-    }
-
-    @PostMapping("/cancel/{imp_uid}")
-    public IamportResponse<Payment> cancelPayment(@PathVariable String imp_uid) throws IamportResponseException, IOException {
-        return paymentService.cancelPayment(imp_uid);
-    }
+    private String email;
 }
+
+@Entity
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+public class Product {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    private User user;
+
+    private String name;
+
+    private String description;
+
+    private int price;
+
+}
+
 ```
 
-## 3.Service
+다음은 두 개의 엔티티이다. 데이터베이스에 두 개의 테이블로 구성될 것이며 가장 간단하게 연관관계를 가지도록 만들었다.
 
 ```
 @Service
-@Slf4j
 @RequiredArgsConstructor
-public class PaymentService {
-    private final IamportClient iamportClient;
-    private final OrderRepository orderRepository;
+public class ProductService {
+    private final ProductRepository productRepository;
 
-    /**
-     * 아임포트 서버로부터 결제 정보를 검증
-     * @param imp_uid
-     */
-    public IamportResponse<Payment> validateIamport(String imp_uid) {
-        try {
-            IamportResponse<Payment> payment = iamportClient.paymentByImpUid(imp_uid);
-            log.info("결제 요청 응답. 결제 내역 - 주문 번호: {}", payment.getResponse());
-            return payment;
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            return null;
-        }
+    public Product createProduct(Long userId, String name, String description, int price) {
+        return productRepository.save(Product.builder()
+                .user(User.builder().id(userId).build())
+                .name(name)
+                .description(description)
+                .price(price)
+                .build());
     }
+}
 
-    /**
-     * 아임포트 서버로부터 결제 취소 요청
-     *
-     * @param imp_uid
-     * @return
-     */
-    public IamportResponse<Payment> cancelPayment(String imp_uid) {
-        try {
-            CancelData cancelData = new CancelData(imp_uid, true);
-            IamportResponse<Payment> payment = iamportClient.cancelPaymentByImpUid(cancelData);
-            return payment;
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            return null;
-        }
-    }
+```
 
-    /**
-     * 주문 정보 저장
-     * @param orderDto
-     * @return
-     */
-    public String saveOrder(OrderDto orderDto){
-        try {
-            orderRepository.save(orderDto.toEntity());
-            return "주문 정보가 성공적으로 저장되었습니다.";
-        } catch (Exception e) {
-            log.info(e.getMessage());
-            cancelPayment(orderDto.getImpUid());
-            return "주문 정보 저장에 실패했습니다.";
-        }
+아주 간단한 서비스 코드를 작성하고
+
+```
+@SpringBootTest
+class ProductServiceTest {
+    @Autowired
+    private ProductService productService;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Test
+    void createProduct() {
+        // Given
+        Long userId = 1L;
+        String name = "product";
+        String description = "description";
+        int price = 1000;
+
+        // When
+        Product product = productService.createProduct(userId, name, description, price);
+
+        // Then
+        assertThat(product.getName()).isEqualTo(name);
     }
 }
 ```
 
-우선 Config 를 통해 IamportClient 를 Bean 으로 등록한다.
+가장 간단한 테스트 코드를 작성한다면 해당 테스트는 환경에 따라 실패할수도 있고 성공할 수도 있다.
 
-이전에는 token 을 발급받고 특정 url 을 통해 결제 조회 및 취소를 진행했지만 지금은 IamportClient 를 통해 간편하게 조회 및 취소가 가능하다.
+실패한다면 아마 아래와 같은 메세지가 뜰 가능성이 높다.
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/51d77da4-8225-4581-9fe4-bfbe46dc55c0)
+![image](https://github.com/min9805/min9805.github.io/assets/56664567/bbbb81cd-c81a-4980-adaa-7254696b455d)
 
-# 추가
+해당 메세지는 User 에 ID 값이 1L 인 유저가 존재하지 않는데, Product 를 생성하면서 매핑하려한다는 뜻이다.
 
-## PG 테스트 설정
+하지만 데이터베이스에 User 생성해준다면 아래와같이 바로 성공 메세지가 떠오른다.
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/04f23a7f-a34b-417a-a668-fc6413beabaf)
+![image](https://github.com/min9805/min9805.github.io/assets/56664567/e3f81d8b-f563-476c-ab51-58941b479a15)
 
-해당 에러가 발생했었다. 이는 PortOne 에서 PG 설정을 등록하지 않았기 때문인다.
+환경에 따라 같은 테스트가 실패하고 성공한다니, 테스트에 적합하지 않다..!
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/ed117dc7-8f46-4e0f-bd44-5f0064ea72c6)
+위 같은 상황을 방지하고자 테스트 데이터베이스를 분리해보도록 하자.
 
-테스트를 위해서 혹은 실제 결제를 위해 등록 과정이 필요하다.
+## Test DataBase 분리
 
-![image](https://github.com/min9805/SpringFrameWork/assets/56664567/5f55c8ee-9afb-4cab-9b2f-3f970a01125a)
+![image](https://github.com/min9805/min9805.github.io/assets/56664567/4f4b8817-779d-492f-8760-be5adfa204b1)
 
+본 게시글에서는 MySQL 을 동일하게 Test DB 로 사용하도록 하겠다.
 
+우선 test/resource/application.yml 파일을 작성해주어야한다.
+
+여기서 3가지 설정이 주요하다.
+
+- spring.jpa.hibernate.ddl-auto: create
+    - 애플리케이션 시작 시점에 Hibernate가 데이터베이스 스키마를 생성한다.
+    - 대부분이 사용하는 update 와 달리 스키마를 항상 새로 만들어내기에 주의해야한다.
+- spring.jpa.defer-datasource-initialization: true
+    - 데이터 소스 초기화를 지연시키는 방법을 지정한다. true로 설정하면, 데이터베이스 연결을 초기화하는 것을 미루고 애플리케이션 구동 중에 필요한 시점에서 연결을 수행한다.
+- spring.sql.init.mode: always
+    - SQL 초기화를 항상 수행할 것인지를 지정한다. always로 설정하면, 애플리케이션 시작 시점에 SQL 초기화를 항상 수행합니다. SQL 초기화는 schema.sql 및 data.sql 파일을 실행하여 데이터베이스 스키마와 초기 데이터를 설정한다. 이 설정은 스키마 및 데이터가 변경되는 경우에도 항상 초기화를 수행하기 때문에 데이터베이스를 재설정하고자 할 때 사용할 수 있다. 다만, SpringBoot 2.4x 이하 버전이라면 이 설정을 사용하지 않고 spring.datasource.initialization-mode=always로 설정해줘야 한다.
+
+## 초기 데이터 삽입
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/7a31e625-34a5-470f-b630-c75615b988dc)
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/75f7662b-d163-4ae5-8439-a9c43d788fc9)
+
+schema.sql 과 data.sql 이다.
+
+말 그대로 스키마를 생성하고 데이터를 넣을 수 있는 파일이다.
+스키마는 JPA 기본 스키마 생성 매커니즘으로 생성되지만 위와 같이 사용자 지정으로 생성할 수도 있다. 이때에는 `ddl-auto` 를 none 으로 설정하는 것을 잊지 말아야한다.
+
+실제 테스트코드도 작성해보았을 때 성공하는 것과 DB 에 데이터가 남아있는 것을 눈으로 확인할 수 있다!
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/435d94e7-07ce-41dc-a613-6e36b3af7e70)
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/e17dbcea-d3c0-4c75-8a89-23a1a4d3141d)
+
+하지만 이 방법도 문제가 있다. 모든 테스트에 data 가 들어가기 때문에 UserService 테스트에서는 2명의 유저가 이미 존재하기에 어떤 식으로든 문제가 발생할 여지가 존재한다.
+
+이를 해결하기 위해 데이터를 사용자가 선택해 삽입할 수 있도록 하자!
+
+## @Sql
+
+이를 위해 먼저 삽입할 데이터를 나눠주어야한다. 도메인 별로 나눌 수도 있고, 각 테스트 별로 필요한 데이터끼리 묶어줄 수도 있겠다.
+
+여기서는 도메인 별로 나누도록 하겠다.
+
+기존 data.sql 의 내용을 지우고
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/9af15352-2b59-4955-89f9-29aed046b601)
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/e9cb7453-8697-4c07-81f5-0f78c3c9a650)
+
+두 개의 sql 파일을 생성하였다.
+
+```
+    @Test
+    @Sql("/user.sql")
+    void createProduct() { ... }
+```
+
+그리고 테스트 메서드에 @Sql 어노테이션을 사용해 필요한 데이터를 삽입한다.
+이렇게 되면 해당 메서드가 실행될 때는 user.sql 이 실행되 필요한 데이터가 들어가기에 테스트가 성공한다.
+
+UserService 에서는 필요하지 않은 데이터를 삽입하지 않아도 되기에 테스트 간 데이터를 분리할 수 있다!
+
+```
+    @Test
+    @Sql(scripts = {"/user.sql", "/product.sql"})
+    void createProduct() { ... }
+
+```
+
+만약 user 이외에 product 데이터도 삽입이 필요하다면 위와 같이 여러 데이터를 삽입할 수 있다.
+
+@Sql 애노테이션은 별도 설정을 하지 않으면 @ContextConfiguration에 지정한 설정 정보에 있는 DataSource 빈을 사용해서 스크립트를 실행하고, 트랜잭션 관리자가 존재할 경우 해당 트랜잭션 관리자를 이용해서 트랜잭션 범위 내에서 스크립트를 실행한다.
+
+```
+@SpringBootTest
+class ProductServiceTest {
+    @Autowired
+    private ProductService productService;
+
+    @Test
+    @Sql(scripts = {"/user.sql", "/product.sql"})
+    void createProduct() {
+        // Given
+        Long userId = 1L;
+        String name = "product";
+        String description = "description";
+        int price = 1000;
+
+        // When
+        Product product = productService.createProduct(userId, name, description, price);
+
+        // Then
+        assertThat(product.getName()).isEqualTo(name);
+    }
+
+    @Test
+    void createProduct2() {
+        // Given
+        Long userId = 1L;
+        String name = "product";
+        String description = "description";
+        int price = 1000;
+
+        // When
+        Product product = productService.createProduct(userId, name, description, price);
+
+        // Then
+        assertThat(product.getName()).isEqualTo(name);
+    }
+}
+```
+
+따라서 위와 같이 작성하더라도 createProdut2 에서는 User 데이터가 존재하지 않기에 에러가 발생한다.
+
+![image](https://github.com/min9805/SpringFrameWork/assets/56664567/20c1f6d4-82d4-4942-8389-5333ce8910ab)
+
+또한 @Sql 어노테이션은 클래스에서 선언되어 내부 메서드 전체에 적용시킬 수도 있으며 @SqlConfig 를 통해 SQL 스크립트에 대한 로컬 구성도 가능하다!
+
+테스트 코드에서 데이터베이스를 분리하고 각 테스트마다 필요한 데이터를 삽입해 테스트를 진행하도록 하자!
+
+# 코드
+
+[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/Test_Database)
 
 # 참고
 
-[Github Code](https://github.com/min9805/SpringFrameWork/tree/master/Payment)
+[SpringBoot 테스트시 초기 SQL 데이터 삽입 - Test SQL](https://0soo.tistory.com/194)
 
 
-[PortOne 개발자 센터](https://developers.portone.io/docs/ko/readme?v=v1)
+[Spring - Spring Boot 초기 데이터 설정 (data.sql)](https://green-bin.tistory.com/113)
+
