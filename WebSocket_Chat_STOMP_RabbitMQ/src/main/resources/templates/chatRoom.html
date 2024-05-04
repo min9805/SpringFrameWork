@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .chat-container {
+            width: 400px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .chat-messages {
+            overflow-y: scroll;
+            height: 300px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+        .message .sender {
+            font-weight: bold;
+        }
+        .message .time {
+            font-size: 0.8em;
+            color: #888;
+        }
+        .message .text {
+            margin-left: 10px;
+        }
+        .chat-input {
+            margin-top: 10px;
+            display: flex;
+        }
+        .chat-input input[type="text"] {
+            flex: 1;
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .chat-input button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <h2> chat Room</h2>
+    <div class="chat-messages" id="chat-messages">
+        <!-- 메시지가 표시될 영역 -->
+    </div>
+    <div class="chat-input">
+        <input type="text" id="message-input" placeholder="Type your message...">
+        <button id="send-button">Send</button>
+    </div>
+</div>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    var chatRoomId = /*[[${chatRoomId}]]*/ '';
+    /*]]>*/
+</script>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    var userId = /*[[${userId}]]*/ '';
+    /*]]>*/
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script>
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const chatMessages = document.getElementById('chat-messages');
+
+    let stompClient = null;
+
+    function connect() {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.connect({}, function(frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/chat/' + chatRoomId, function(messageOutput) {
+                showMessage(JSON.parse(messageOutput.body));
+            });
+        });
+    }
+
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message !== '') {
+            data = {
+                chatRoomId: chatRoomId,
+                sender: userId,
+                message: message
+            }
+
+            stompClient.send('/app/chat/' + chatRoomId, {}, JSON.stringify(data));
+            messageInput.value = '';
+        }
+    }
+
+    function showMessage(message) {
+        const currentTime = new Date().toLocaleTimeString();
+        const messageElement = `
+            <div class="message">
+                <span class="sender">${message.sender}</span>
+                <span class="time">${currentTime}</span>
+                <p class="text">${message.message}</p>
+            </div>
+        `;
+        chatMessages.innerHTML += messageElement;
+    }
+
+    sendButton.addEventListener('click', function() {
+        sendMessage();
+    });
+
+    messageInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    connect();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Index Page</title>
+</head>
+<body>
+<h1>User List</h1>
+<ul>
+    <li th:each="user : ${users}">
+        <!-- 각 유저 아이템을 <a> 링크로 변환 -->
+        <a th:href="@{'/chat/' + ${user.id}}" th:text="${user.name}"></a>
+    </li>
+</ul>
+
+</body>
+</html>
