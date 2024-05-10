@@ -7,7 +7,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface ReservationRepository extends JpaRepository<Reservation, Long>, ReservationCustomRepository {
+public interface ReservationRepository extends JpaRepository<Reservation, Long> {
     List<Reservation> findByClientIdAndReservatedAtBefore(Long client_id, LocalDateTime reservatedAt);
     List<Reservation> findByClientIdAndReservatedAtLessThanEqual(Long client_id, LocalDateTime reservatedAt);
 }

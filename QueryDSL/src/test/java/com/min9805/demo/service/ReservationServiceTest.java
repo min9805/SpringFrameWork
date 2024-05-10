@@ -1,6 +1,7 @@
 package com.min9805.demo.service;
 
 import com.min9805.demo.doamin.Reservation;
+import com.min9805.demo.repository.ReservationQueryRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,9 @@ import static org.assertj.core.api.Assertions.*;
 class ReservationServiceTest {
     @Autowired
     private ReservationService reservationService;
+
+    @Autowired
+    private ReservationQueryRepository reservationQueryRepository;
 
     @Test
     @DisplayName("과거 예약 내역 조회")
