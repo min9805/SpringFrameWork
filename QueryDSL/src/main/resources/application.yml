@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:sqlite.db
+    driver-class-name: org.sqlite.JDBC
+    username: root
+    password: root
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: create
+    defer-datasource-initialization: true
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  sql:
+    init:
+      mode: always
+
+logging:
+    level:
+        org.hibernate.orm.jdbc.bind: TRACE
