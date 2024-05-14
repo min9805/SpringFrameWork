@@ -1,10 +1,14 @@
 package com.min9805.demo.controller;
 
 import com.min9805.demo.domain.ChatRoom;
+import com.min9805.demo.dto.ChatDto;
+import com.min9805.demo.service.ChatHistroyService;
 import com.min9805.demo.service.ChatRoomService;
 import com.min9805.demo.service.UserService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.Response;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +22,7 @@ import java.util.List;
 public class HomeController {
     private final UserService userService;
     private final ChatRoomService chatRoomService;
+    private final ChatHistroyService chatHistroyService;
 
     @GetMapping("/")
     public String index(Model model) {
@@ -44,4 +49,5 @@ public class HomeController {
         model.addAttribute("userId", userId);
         return "chatRoom";
     }
+
 }
