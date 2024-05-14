@@ -103,7 +103,7 @@
             data = {
                 chatRoomId: chatRoomId,
                 sender: userId,
-                message: message
+                payload: message
             }
 
             stompClient.send('/app/chat/' + chatRoomId, {}, JSON.stringify(data));
@@ -117,7 +117,7 @@
             <div class="message">
                 <span class="sender">${message.sender}</span>
                 <span class="time">${currentTime}</span>
-                <p class="text">${message.message}</p>
+                <p class="text">${message.payload}</p>
             </div>
         `;
         chatMessages.innerHTML += messageElement;

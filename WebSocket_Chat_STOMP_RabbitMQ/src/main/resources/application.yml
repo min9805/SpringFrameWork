@@ -9,4 +9,6 @@ spring:
       ddl-auto: update
     show-sql: true
 
-
+  data:
+    mongodb:
+      uri: mongodb+srv://min1925k:50c1hxznM47soeCa@cluster0.feqdlxq.mongodb.net/chatHistory?retryWrites=true&w=majority&appName=Cluster0&authSource=admin

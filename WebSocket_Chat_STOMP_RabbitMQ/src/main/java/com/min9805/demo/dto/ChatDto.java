@@ -7,14 +7,7 @@ public class ChatDto {
 
     private Long chatRoomId;
     private String sender;
-    private String message;
-}
+    private String payload;
 
-/*
-example
-{
-    "chatRoomId": 1,
-    "sender": "min9805",
-    "message": "Hello, World!"
+
 }
- */
